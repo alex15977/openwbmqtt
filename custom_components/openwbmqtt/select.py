@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import logging
 
-from homeassistant.components import mqtt
+from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.components.select import DOMAIN, SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -124,7 +124,8 @@ class openwbSelect(OpenWBBaseEntity, SelectEntity):
 
         # Subscribe to MQTT topic and connect callack message
         if self.entity_description.mqttTopicCurrentValue is not None:
-            await mqtt.async_subscribe(
+        # With this:
+            await async_subscribe(
                 self.hass,
                 self.entity_description.mqttTopicCurrentValue,
                 message_received,
@@ -132,17 +133,11 @@ class openwbSelect(OpenWBBaseEntity, SelectEntity):
             )
 
     async def async_select_option(self, option: str) -> None:
-        """Change the selected option.
+        """Change the selected option."""
+        await self.publishToMQTT(option)
+        # The rest remains unchanged
 
-        After select --> the result is published to MQTT.
-        But the HA sensor shall only change when the MQTT message on the /get/ topic is received.
-        Only then, openWB has changed the setting as well.
-        """
-        self.publishToMQTT(option)
-        # self._attr_current_option = option
-        # self.async_write_ha_state()
-
-    def publishToMQTT(self, commandValueToPublish):
+    async def publishToMQTT(self, commandValueToPublish):
         """Publish data to MQTT."""
         topic = f"{self.entity_description.mqttTopicCommand}"
         _LOGGER.debug("MQTT topic: %s", topic)
@@ -154,4 +149,4 @@ class openwbSelect(OpenWBBaseEntity, SelectEntity):
             publish_mqtt_message = False
 
         if publish_mqtt_message:
-            mqtt.publish(self.hass, topic, payload)
+            await async_publish(self.hass, topic, payload)
