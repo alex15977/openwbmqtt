@@ -6,7 +6,7 @@ from datetime import timedelta
 import logging
 import re
 
-from homeassistant.components import mqtt
+from homeassistant.components.mqtt import async_subscribe
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -199,7 +199,7 @@ class openwbSensor(OpenWBBaseEntity, SensorEntity):
             self.async_write_ha_state()
 
         # Subscribe to MQTT topic and connect callack message
-        await mqtt.async_subscribe(
+        await async_subscribe(
             self.hass,
             self.entity_description.mqttTopicCurrentValue,
             message_received,

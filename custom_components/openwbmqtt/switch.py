@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import logging
 
-from homeassistant.components import mqtt
+from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.components.switch import DOMAIN, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -109,36 +109,27 @@ class openwbSwitch(OpenWBBaseEntity, SwitchEntity):
             self.async_write_ha_state()
 
         # Subscribe to MQTT topic and connect callack message
-        await mqtt.async_subscribe(
+        # With this:
+        await async_subscribe(
             self.hass,
             self.entity_description.mqttTopicCurrentValue,
             message_received,
             1,
         )
 
-    def turn_on(self, **kwargs):
-        """Turn the switch on.
-
-        After turn_on --> the result is published to MQTT.
-        But the HA sensor shall only change when the MQTT message on the /get/ topic is received.
-        Only then, openWB has changed the setting as well.
-        """
+    async def turn_on(self, **kwargs):
+        """Turn the switch on."""
         self._attr_is_on = True
-        self.publishToMQTT()
+        await self.publishToMQTT()
         # self.schedule_update_ha_state()
 
-    def turn_off(self, **kwargs):
-        """Turn the device off.
-
-        After turn_off --> the result is published to MQTT.
-        But the HA sensor shall only change when the MQTT message on the /get/ topic is received.
-        Only then, openWB has changed the setting as well.
-        """
+    async def turn_off(self, **kwargs):
+        """Turn the device off."""
         self._attr_is_on = False
-        self.publishToMQTT()
+        await self.publishToMQTT()
         # self.schedule_update_ha_state()
 
-    def publishToMQTT(self):
+    async def publishToMQTT(self):
         """Publish data to MQTT."""
         topic = f"{self.entity_description.mqttTopicCommand}"
-        self.hass.components.mqtt.publish(self.hass, topic, str(int(self._attr_is_on)))
+        await async_publish(self.hass, topic, str(int(self._attr_is_on)))

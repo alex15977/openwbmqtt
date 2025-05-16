@@ -5,7 +5,7 @@ import copy
 import logging
 
 # from sqlalchemy import desc
-from homeassistant.components import mqtt
+from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.components.number import DOMAIN, NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -143,7 +143,7 @@ class openWBNumber(OpenWBBaseEntity, NumberEntity):
             self.async_write_ha_state()
 
         # Subscribe to MQTT topic and connect callack message
-        await mqtt.async_subscribe(
+        await async_subscribe(
             self.hass,
             self.entity_description.mqttTopicCurrentValue,
             message_received,
@@ -151,20 +151,15 @@ class openWBNumber(OpenWBBaseEntity, NumberEntity):
         )
 
     async def async_set_native_value(self, value):
-        """Update the current value.
-
-        After set_value --> the result is published to MQTT.
-        But the HA sensor shall only change when the MQTT message on the /get/ topic is received.
-        Only then, openWB has changed the setting as well.
-        """
+        """Update the current value."""
         self._attr_native_value = value
-        self.publishToMQTT()
+        await self.publishToMQTT()
         # self.async_write_ha_state()
 
-    def publishToMQTT(self):
+    async def publishToMQTT(self):
         """Publish data to MQTT."""
         topic = f"{self.entity_description.mqttTopicCommand}"
         _LOGGER.debug("MQTT topic: %s", topic)
         payload = str(int(self._attr_native_value))
         _LOGGER.debug("MQTT payload: %s", payload)
-        self.hass.components.mqtt.publish(self.hass, topic, payload)
+        await async_publish(self.hass, topic, payload)

@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import logging
 
-from homeassistant.components import mqtt
+from homeassistant.components.mqtt import async_subscribe
 from homeassistant.components.binary_sensor import DOMAIN, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -117,7 +117,7 @@ class openwbBinarySensor(OpenWBBaseEntity, BinarySensorEntity):
             # Update entity state with value published on MQTT.
             self.async_write_ha_state()
 
-        await mqtt.async_subscribe(
+        await async_subscribe(
             self.hass,
             self.entity_description.mqttTopicCurrentValue,
             message_received,
