@@ -109,7 +109,6 @@ class openwbSwitch(OpenWBBaseEntity, SwitchEntity):
             self.async_write_ha_state()
 
         # Subscribe to MQTT topic and connect callack message
-        # With this:
         await async_subscribe(
             self.hass,
             self.entity_description.mqttTopicCurrentValue,
@@ -132,4 +131,13 @@ class openwbSwitch(OpenWBBaseEntity, SwitchEntity):
     async def publishToMQTT(self):
         """Publish data to MQTT."""
         topic = f"{self.entity_description.mqttTopicCommand}"
-        await async_publish(self.hass, topic, str(int(self._attr_is_on)))
+        payload = str(int(self._attr_is_on))
+        _LOGGER.debug("Publishing via service: %s = %s", topic, payload)
+        
+        # MQTT-Service direkt verwenden statt async_publish
+        service_data = {
+            "topic": topic,
+            "payload": payload,
+            "qos": 1
+        }
+        await self.hass.services.async_call("mqtt", "publish", service_data)
