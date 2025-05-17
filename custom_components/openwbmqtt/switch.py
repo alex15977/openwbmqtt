@@ -81,12 +81,12 @@ class openwbSwitch(OpenWBBaseEntity, SwitchEntity):
         # Initialize the inverter operation mode setting entity
         self.entity_description = description
         
-        # Aktiviere optimistischen Modus
+        # Optimistischen Modus aktivieren
         self._attr_optimistic = True
         
-        # Definiere die MQTT-Themen explizit
-        self._topic_command = None
-        self._topic_state = None
+        # Attribute explizit initialisieren
+        self._attr_is_on = False
+        self._attr_available = True
 
         if nChargePoints:
             self._attr_unique_id = slugify(
@@ -101,19 +101,18 @@ class openwbSwitch(OpenWBBaseEntity, SwitchEntity):
             self.entity_id = f"{DOMAIN}.{unique_id}-{description.name}"
             self._attr_name = description.name
             
-        # MQTT-Themen explizit speichern
-        self._topic_command = description.mqttTopicCommand
-        self._topic_state = description.mqttTopicCurrentValue
-        
         _LOGGER.debug("Initializing switch %s with command topic %s and state topic %s", 
-                     self._attr_name, self._topic_command, self._topic_state)
+                     self._attr_name, description.mqttTopicCommand, description.mqttTopicCurrentValue)
 
     async def async_added_to_hass(self):
         """Subscribe to MQTT events."""
 
         @callback
         def message_received(message):
-            _LOGGER.debug("Received MQTT message on %s: %s", self._topic_state, message.payload)
+            """Handle new MQTT messages."""
+            _LOGGER.debug("Received MQTT message: %s = %s", 
+                         self.entity_description.mqttTopicCurrentValue, message.payload)
+            
             try:
                 payload_value = int(message.payload)
                 if payload_value == 1:
@@ -123,70 +122,70 @@ class openwbSwitch(OpenWBBaseEntity, SwitchEntity):
                 else:
                     self._attr_is_on = None
                 
-                _LOGGER.debug("Updated state for %s to %s", self._attr_name, self._attr_is_on)
+                self._attr_available = True
                 self.async_write_ha_state()
             except Exception as e:
                 _LOGGER.error("Error processing MQTT message: %s", str(e))
 
-        # Subscribe to MQTT topic and connect callback message
+        # Explizit auf MQTT-Thema abonnieren
         try:
-            _LOGGER.debug("Subscribing to MQTT topic: %s", self._topic_state)
             await async_subscribe(
                 self.hass,
-                self._topic_state,
+                self.entity_description.mqttTopicCurrentValue,
                 message_received,
-                1,
+                qos=1,
             )
-            _LOGGER.debug("Successfully subscribed to MQTT topic")
+            _LOGGER.debug("Successfully subscribed to MQTT topic: %s", 
+                         self.entity_description.mqttTopicCurrentValue)
         except Exception as e:
             _LOGGER.error("Failed to subscribe to MQTT topic: %s", str(e))
+            self._attr_available = False
+            self.async_write_ha_state()
 
-    async def turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs):
         """Turn the switch on."""
         _LOGGER.debug("Turn on called for %s", self._attr_name)
-        self._attr_is_on = True
-        await self.publishToMQTT()
-        self.async_write_ha_state()  # Direkt den Status aktualisieren
-
-    async def turn_off(self, **kwargs):
-        """Turn the device off."""
-        _LOGGER.debug("Turn off called for %s", self._attr_name)
-        self._attr_is_on = False
-        await self.publishToMQTT()
-        self.async_write_ha_state()  # Direkt den Status aktualisieren
-
-    async def publishToMQTT(self):
-        """Publish data to MQTT."""
-        if not self._topic_command:
-            _LOGGER.error("Cannot publish: Command topic is not set")
-            return
-            
-        payload = str(int(self._attr_is_on))
-        _LOGGER.debug("Publishing via service to topic %s: payload %s", self._topic_command, payload)
         
+        # Zustand vor MQTT-Operationen setzen (optimistisch)
+        self._attr_is_on = True
+        self.async_write_ha_state()
+        
+        # MQTT-Nachricht senden
         try:
-            # Versuch 1: Service-Aufruf
+            # Diese Methode entspricht genau der funktionierenden MQTT-Switch-Implementierung
             service_data = {
-                "topic": self._topic_command,
-                "payload": payload,
+                "topic": self.entity_description.mqttTopicCommand,
+                "payload": "1",  # String wie im externen Switch
                 "qos": 1,
                 "retain": False
             }
             await self.hass.services.async_call("mqtt", "publish", service_data)
-            _LOGGER.debug("MQTT publish via service completed")
-            
-            # Versuch 2: Als Backup zusätzlich direkt über async_publish
-            try:
-                await async_publish(
-                    self.hass, 
-                    self._topic_command, 
-                    payload, 
-                    qos=1, 
-                    retain=False
-                )
-                _LOGGER.debug("MQTT publish via async_publish also completed")
-            except Exception as e:
-                _LOGGER.warning("Backup async_publish failed, but service call should work: %s", str(e))
-                
+            _LOGGER.debug("Successfully published ON command to %s", 
+                         self.entity_description.mqttTopicCommand)
         except Exception as e:
-            _LOGGER.error("All MQTT publish attempts failed: %s", str(e))
+            _LOGGER.error("Failed to publish MQTT message: %s", str(e))
+            # Selbst bei Fehlern bleibt der Zustand optimistisch
+
+    async def async_turn_off(self, **kwargs):
+        """Turn the device off."""
+        _LOGGER.debug("Turn off called for %s", self._attr_name)
+        
+        # Zustand vor MQTT-Operationen setzen (optimistisch)
+        self._attr_is_on = False
+        self.async_write_ha_state()
+        
+        # MQTT-Nachricht senden
+        try:
+            # Diese Methode entspricht genau der funktionierenden MQTT-Switch-Implementierung
+            service_data = {
+                "topic": self.entity_description.mqttTopicCommand,
+                "payload": "0",  # String wie im externen Switch
+                "qos": 1,
+                "retain": False
+            }
+            await self.hass.services.async_call("mqtt", "publish", service_data)
+            _LOGGER.debug("Successfully published OFF command to %s", 
+                         self.entity_description.mqttTopicCommand)
+        except Exception as e:
+            _LOGGER.error("Failed to publish MQTT message: %s", str(e))
+            # Selbst bei Fehlern bleibt der Zustand optimistisch
